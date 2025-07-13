@@ -10,7 +10,7 @@ Here's my thoughts on a few articles that cover these topics
 
 ### Vanilla RAG
 
-> [Vanilla RAG](./media/vanilla_rag_flowchart.png, "Vanilla RAG Flowchart")
+> [Vanilla RAG](./media/vanilla_rag_flowchart.png "Vanilla RAG Flowchart")
 
 - Naive RAG considers only one external knowledge source.
 - One shot retrieval (based on embedded query against embedded+chunked documents) to provide context to LLM to generate a response
@@ -31,7 +31,7 @@ Here's my thoughts on a few articles that cover these topics
   - Planning (eg. reflection, self-critics, query routing etc)
   - Tools (eg. web-search, bash-command-execution etc)
 - The ReAct (Reason + Act) Framework is used to demonstrate how Agents behave
-  - [ReAct Framework](./media/react_framework_flowchart.png, "ReAct = Reason + Act (With LLMs)")
+  - [ReAct Framework](./media/react_framework_flowchart.png "ReAct = Reason + Act (With LLMs)")
   - Thought: Receive user query to then being reasoning about a plan for the next action
   - Action: Agent decides an action and executes it.
   - Observation: The Agent observes feedback from the action.
