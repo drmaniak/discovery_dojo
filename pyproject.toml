@@ -1,0 +1,10 @@
+[project]
+name = "discovery-dojo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pre-commit>=4.2.0",
+    "ruff>=0.12.3",
+]
