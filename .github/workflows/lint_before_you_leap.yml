@@ -1,4 +1,4 @@
-name: CI
+name: Lint Before You Leap
 on: push
 jobs:
   build:
