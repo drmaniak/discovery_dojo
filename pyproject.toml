@@ -10,3 +10,6 @@ dependencies = [
     "pre-commit>=4.2.0",
     "ruff>=0.12.3",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.pyi" = ["F401"]

@@ -1,0 +1,7 @@
+Agentic RAG
+
+Atomic unit of an Agentic RAG graph is the agent.
+These agents can vary in complexity, but they are essentially role & task
+constrained LLMs with the ability to use tools/functions and have a feedback
+mechanism
+Unpopular Opinions: An agent is basically a graph (within the larger Graph)

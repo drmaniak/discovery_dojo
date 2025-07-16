@@ -1,0 +1,18 @@
+Agents in AI
+
+In a nutshell, agents are LLMs with a role (that have access to memory and
+external tools).
+Reasoning ability of LLMs allow it to plan and act to complete tasks
+Some notable components of agents are
+LLM (with defined role & task)
+Memory (short-term & long-term)
+Planning (eg. reflection, self-critics, query routing etc)
+Tools (eg. web-search, bash-command-execution etc)
+The ReAct (Reason + Act) Framework is used to demonstrate how Agents behave
+ReAct Framework
+Thought: Receive user query to then being reasoning about a plan for the
+next action
+Action: Agent decides an action and executes it.
+Observation: The Agent observes feedback from the action.
+Repeat until task is completed.
+
