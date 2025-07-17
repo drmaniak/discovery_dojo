@@ -28,7 +28,7 @@ Nodes:
 Flow: LoadFile >> DecideLength - "short" >> SummarizeShort >> PrintResult
 Flow: LoadFile >> DecideLength - "long" >> SummarizeLong >> PrintResult
 
-## [Batch Flow](../branching_flow.py)
+## [Batch Flow](../batch_flow.py)
 
 Goal: Pass in a folder as arg, and read all text files inside it. Then run a batch flow for each text file.
 
@@ -46,9 +46,28 @@ Nodes:
 Flow: LoadFile >> FolderBatchFlow(ReadFile >> DecideLength - "short" >> SummarizeShort >> PrintResult)
 Flow: LoadFile >> FolderBatchFlow(ReadFile >> DecideLength - "long" >> SummarizeLong >> PrintResult)
 
-## [Nested Batch Flow](../branching_flow.py)
+## [Nested Batch Flow](../nested_batch_flow.py)
 
 Goal: Pass in a folder as arg, and read all text files inside it. Then run a batch flow for each text file.
+
+Nodes:
+
+1. FolderBatchFlow (accepts a list of dirs as arguments)
+1. LoadFiles (reads a directory path, loads all .txt files into a shared\["folder"\])
+1. FileBatchFlow (will be run on every filepath in the shared folder)
+1. ReadFile (reads a path, loads text -> shared\["raw"\])
+1. DecideLength (Reads file contents to determine if "long" or "short")
+1. Branch based on length
+   a. SummarizeLong (LLM call on shared\["raw"\])
+   b. SummarizeShort (LLM call on shared\["raw"\])
+1. PrintResult (just prints)
+
+Flow: FolderBatchFlow(LoadFile >> FileBatchFlow(ReadFile >> DecideLength - "short" >> SummarizeShort >> PrintResult))
+Flow: FolderBatchFlow(LoadFile >> FileBatchFlow(ReadFile >> DecideLength - "long" >> SummarizeLong >> PrintResult))
+
+## [Async Nested Batch Flow](../async_nested_batch_flow.py)
+
+Goal: asyncio.run\(Pass in a folder as arg, and read all text files inside it. Then run a batch flow for each text file.\)
 
 Nodes:
 
