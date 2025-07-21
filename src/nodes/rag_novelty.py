@@ -11,9 +11,8 @@ from domain.shared_store import (
     get_shared_store,
     update_shared_store,
 )
-from utils import prompts
 from utils.custom_qdrant_client import QdrantClient
-from utils.llm_utils import call_embedder, call_llm
+from utils.llm_utils import call_embedder
 from utils.reranking import rerank_papers_optional
 
 # RAG Flow Nodes for Novelty Assessment
@@ -183,7 +182,7 @@ class NoveltyAssessmentNode(Node):
         return query_text, store.final_papers, store.config.rag_config
 
     def exec(self, prep_res):
-        """Generate comprehensive novelty assessment."""
+        """Generate novelty assessment using mathematical approach - average novelty scores."""
         research_idea, ranked_papers, rag_config = prep_res
 
         if not ranked_papers:
@@ -200,100 +199,86 @@ class NoveltyAssessmentNode(Node):
             )
             return assessment
 
-        # Prepare paper summaries for LLM
+        # Calculate final novelty score mathematically
+        # Average the novelty scores (which are already 1 - similarity)
+        novelty_scores = [ranked_paper.novelty_score for ranked_paper in ranked_papers]
+        final_novelty_score = sum(novelty_scores) / len(novelty_scores)
+
+        # Calculate confidence based on consistency of novelty scores
+        # If all scores are similar, we have high confidence
+        # If scores vary widely, confidence is lower
+        if len(novelty_scores) > 1:
+            variance = sum(
+                (score - final_novelty_score) ** 2 for score in novelty_scores
+            ) / len(novelty_scores)
+            # Convert variance to confidence (lower variance = higher confidence)
+            # Scale so that variance of 0.01 gives confidence ~0.9, variance of 0.25 gives confidence ~0.3
+            confidence = max(0.3, min(0.9, 0.9 - (variance * 2.4)))
+        else:
+            confidence = 0.7  # Single paper, moderate confidence
+
+        # Generate assessment summary based on the mathematical analysis
+        top_papers = ranked_papers[:5]  # Top 5 most similar
+        min_novelty = min(novelty_scores)
+        max_novelty = max(novelty_scores)
+
+        # Create interpretative summary
+        if final_novelty_score >= 0.8:
+            novelty_level = "highly novel"
+            interpretation = "high potential for original contributions"
+        elif final_novelty_score >= 0.6:
+            novelty_level = "moderately novel"
+            interpretation = "good potential with some novel aspects"
+        elif final_novelty_score >= 0.4:
+            novelty_level = "somewhat novel"
+            interpretation = "limited novelty, significant overlap with existing work"
+        else:
+            novelty_level = "limited novelty"
+            interpretation = "substantial overlap with existing research"
+
+        # Build summary of most similar papers
         paper_summaries = []
-        for i, ranked_paper in enumerate(
-            ranked_papers[:5], 1
-        ):  # Top 5 for LLM analysis
+        for i, ranked_paper in enumerate(top_papers, 1):
             paper = ranked_paper.paper
-            paper_summaries.append(f"""
-            Paper {i}:
-            Title: {paper.title}
-            Abstract: {paper.abstract[:600]}{"..." if len(paper.abstract) > 600 else ""}
-            Similarity Score: {paper.similarity_score:.3f}
-            Novelty Score: {ranked_paper.novelty_score:.3f}
-            """)
+            paper_summaries.append(
+                f"{i}. {paper.title} (novelty: {ranked_paper.novelty_score:.3f})"
+            )
 
-        combined_papers = "\n".join(paper_summaries)
+        assessment_summary = f"""MATHEMATICAL NOVELTY ASSESSMENT
 
-        prompt = prompts.novelty_assessment_prompt.format(
-            research_idea=research_idea, combined_papers=combined_papers
+        Final Novelty Score: {final_novelty_score:.3f} ({novelty_level})
+        Confidence Level: {confidence:.3f}
+        Score Range: {min_novelty:.3f} - {max_novelty:.3f}
+        Papers Analyzed: {len(ranked_papers)}
+
+        INTERPRETATION:
+        This research idea demonstrates {interpretation}. The novelty score of {final_novelty_score:.3f} is calculated as the average of individual paper novelty scores (1 - similarity_score).
+
+        MOST SIMILAR PAPERS:
+        {chr(10).join(paper_summaries)}
+
+        METHODOLOGY:
+        • Novelty scores are calculated as 1 - cosine_similarity for each paper
+        • Final score is the mathematical average of all individual novelty scores
+        • Confidence reflects consistency across papers (lower variance = higher confidence)
+        • No LLM bias or hallucination risk in scoring
+
+        RECOMMENDATION:
+        {"This research direction shows strong potential for novel contributions." if final_novelty_score >= 0.6 else "Consider refining the approach to increase differentiation from existing work, or focus on specific novel aspects."}"""
+
+        # Create assessment
+        assessment = NoveltyAssessment(
+            research_idea=research_idea,
+            total_papers_retrieved=len(ranked_papers),
+            reranking_enabled=rag_config.enable_reranking,
+            final_papers_count=len(ranked_papers),
+            final_novelty_score=final_novelty_score,
+            confidence=confidence,
+            top_similar_papers=ranked_papers[:10],  # Store top 10
+            assessment_summary=assessment_summary,
         )
 
-        try:
-            response = call_llm(prompt)
-
-            # Parse novelty score and confidence
-            lines = response.split("\n")
-            novelty_score = 0.5  # Default
-            confidence = 0.7  # Default
-            assessment_text = response
-
-            for line in lines:
-                line = line.strip()
-                if line.startswith("NOVELTY SCORE:"):
-                    try:
-                        score_text = line.split(":", 1)[1].strip()
-                        # Extract just the number part
-                        import re
-
-                        match = re.search(r"(\d+\.?\d*)", score_text)
-                        if match:
-                            novelty_score = float(match.group(1))
-                            novelty_score = max(
-                                0.0, min(1.0, novelty_score)
-                            )  # Clamp to [0,1]
-                    except Exception as e:
-                        print(f"Error in LLM-based Novelty calculation: {str(e)}")
-
-                elif line.startswith("CONFIDENCE:"):
-                    try:
-                        conf_text = line.split(":", 1)[1].strip()
-                        import re
-
-                        match = re.search(r"(\d+\.?\d*)", conf_text)
-                        if match:
-                            confidence = float(match.group(1))
-                            confidence = max(
-                                0.0, min(1.0, confidence)
-                            )  # Clamp to [0,1]
-                    except Exception as e:
-                        print(f"Error in LLM-based Novelty calculation: {str(e)}")
-
-            # Create assessment
-            assessment = NoveltyAssessment(
-                research_idea=research_idea,
-                total_papers_retrieved=len(ranked_papers) if ranked_papers else 0,
-                reranking_enabled=rag_config.enable_reranking,
-                final_papers_count=len(ranked_papers),
-                final_novelty_score=novelty_score,
-                confidence=confidence,
-                top_similar_papers=ranked_papers[:10],  # Store top 10
-                assessment_summary=assessment_text,
-            )
-
-            return assessment
-
-        except Exception as e:
-            # Fallback assessment if LLM fails
-            avg_novelty = (
-                sum(p.novelty_score for p in ranked_papers) / len(ranked_papers)
-                if ranked_papers
-                else 0.8
-            )
-
-            assessment = NoveltyAssessment(
-                research_idea=research_idea,
-                total_papers_retrieved=len(ranked_papers) if ranked_papers else 0,
-                reranking_enabled=rag_config.enable_reranking,
-                final_papers_count=len(ranked_papers),
-                final_novelty_score=avg_novelty,
-                confidence=0.6,  # Lower confidence for fallback
-                top_similar_papers=ranked_papers[:10],
-                assessment_summary=f"Automated assessment failed ({str(e)}). Novelty estimated from similarity scores: {avg_novelty:.2f}",
-            )
-
-            return assessment
+        return assessment
 
     def post(self, shared, prep_res, exec_res):
         """Store novelty assessment and mark RAG flow as completed."""
