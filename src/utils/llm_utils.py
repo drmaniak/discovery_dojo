@@ -66,9 +66,10 @@ async def call_llm_structured_async(
 def call_embedder(query, model: str = "Qwen/Qwen3-Embedding-8B"):
     client = OpenAI(
         base_url="https://api.studio.nebius.com/v1/",
-        api_key=os.environ.get("NEBIUS _API_KEY"),
+        api_key=os.environ.get("NEBIUS_API_KEY"),
     )
 
     response = client.embeddings.create(model=model, input=query)
 
-    return response
+    # Return just the embedding vector
+    return response.data[0].embedding

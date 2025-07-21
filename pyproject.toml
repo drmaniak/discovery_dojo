@@ -10,6 +10,7 @@ dependencies = [
     "openai>=1.97.0",
     "pocketflow>=0.0.2",
     "pre-commit>=4.2.0",
+    "qdrant-client>=1.15.0",
     "ruff>=0.12.3",
     "tavily-python>=0.7.10",
 ]

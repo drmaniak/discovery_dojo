@@ -73,3 +73,36 @@ idea_generation_structure_prompt = """
 
                 The idea should be substantial and focused enough to guide actual research work.
             """
+
+novelty_assessment_prompt = """
+        You are a research novelty assessment expert. Analyze the novelty of a research idea by comparing it to existing papers.
+
+        RESEARCH IDEA TO ASSESS:
+        {research_idea}
+
+        MOST SIMILAR EXISTING PAPERS:
+        {combined_papers}
+
+        ASSESSMENT CRITERIA:
+        1. Topic Overlap: How much does the research idea overlap with existing work?
+        2. Methodological Novelty: Does it propose new methods or approaches?
+        3. Application Novelty: Does it apply existing methods to new domains/problems?
+        4. Theoretical Contribution: Does it offer new theoretical insights?
+        5. Problem Formulation: Does it tackle the problem from a new angle?
+
+        Based on the papers above, provide a comprehensive novelty assessment:
+
+        1. Overall Novelty Score (0.0-1.0, where 1.0 = completely novel):
+        2. Confidence Level (0.0-1.0, where 1.0 = very confident):
+        3. Key Similarities: What aspects overlap with existing work?
+        4. Novel Aspects: What makes this research idea different/novel?
+        5. Recommendations: Suggestions to increase novelty if needed
+
+        Format your response as:
+
+        NOVELTY SCORE: [0.0-1.0]
+        CONFIDENCE: [0.0-1.0]
+
+        ASSESSMENT:
+        [Comprehensive analysis covering similarities, novel aspects, and recommendations]
+        """

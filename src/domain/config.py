@@ -1,10 +1,43 @@
+"""Configuration and data models for the Idea Generation Flow using Pydantic."""
+
 import os
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 
+class RAGConfig(BaseModel):
+    """Configuration for RAG (Retrieval Augmented Generation) novelty assessment."""
+
+    qdrant_url: str = Field(
+        default="http://localhost:6333", description="Qdrant database URL"
+    )
+    collection_name: str = Field(
+        default="arxiv_papers", description="Qdrant collection name"
+    )
+    top_k_retrieval: int = Field(
+        default=50, ge=1, le=200, description="Number of papers to retrieve"
+    )
+    top_n_final: int = Field(
+        default=10, ge=1, le=50, description="Final number of papers after ranking"
+    )
+    embedding_model: str = Field(
+        default="Qwen/Qwen3-Embedding-8B", description="Embedding model name"
+    )
+
+    # Optional reranking configuration
+    enable_reranking: bool = Field(
+        default=False, description="Whether to enable reranking"
+    )
+    rerank_model: str | None = Field(default=None, description="Reranking model name")
+    rerank_base_url: str = Field(
+        default="http://localhost:8080", description="Local reranker endpoint"
+    )
+
+
 class SearchConfig(BaseModel):
+    """Configuration for search parameters and API keys."""
+
     num_queries: int = Field(
         default=3, ge=1, le=5, description="Number of serach queries to generate"
     )
@@ -16,6 +49,14 @@ class SearchConfig(BaseModel):
     )
     tavily_api_key: str = Field(description="Tavily API key for web search")
     openai_api_key: str = Field(description="OpenAI API key for llm calls")
+
+    # RAG configuration
+    rag_config: RAGConfig = Field(
+        default_factory=RAGConfig, description="RAG novelty assessment configuration"
+    )
+    enable_rag_flow: bool = Field(
+        default=True, description="Whether to enable RAG flow after idea generation"
+    )
 
     @field_validator("tavily_api_key")
     @classmethod
@@ -90,10 +131,67 @@ class ValidationResult(BaseModel):
     cycle_number: int = Field(description="Which validation cycle this represents")
 
     @field_validator("feedback")
+    @classmethod
     def feedback_must_not_be_empty(cls, v):
         if not v or v.strip() == "":
             raise ValueError("Validation feedback cannot be empty")
         return v.strip()
+
+
+# RAG-specific data models
+class EmbeddedQuery(BaseModel):
+    """Query text with its vector embedding."""
+
+    text: str = Field(description="The research idea text")
+    embedding: list[float] = Field(description="Vector embedding of the text")
+    embedding_model: str = Field(description="Model used for embedding")
+
+
+class ArxivPaper(BaseModel):
+    """Individual ArXiv paper from database."""
+
+    id: str = Field(description="Paper identifier")
+    title: str = Field(description="Paper title")
+    abstract: str = Field(description="Paper abstract")
+    similarity_score: float = Field(description="Similarity score to query")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional paper metadata"
+    )
+
+
+class RankedPaper(BaseModel):
+    """Paper with ranking information."""
+
+    paper: ArxivPaper = Field(description="The paper data")
+    original_rank: int = Field(description="Original ranking by similarity")
+    rerank_score: float | None = Field(
+        default=None, description="Reranking score if reranking enabled"
+    )
+    final_rank: int = Field(description="Final ranking position")
+    novelty_score: float = Field(description="Novelty score (inverse of similarity)")
+
+
+class NoveltyAssessment(BaseModel):
+    """Final novelty assessment of the research idea."""
+
+    research_idea: str = Field(description="The research idea being assessed")
+    total_papers_retrieved: int = Field(
+        description="Number of papers retrieved from database"
+    )
+    reranking_enabled: bool = Field(description="Whether reranking was used")
+    final_papers_count: int = Field(
+        description="Number of papers used in final assessment"
+    )
+    final_novelty_score: float = Field(
+        description="Overall novelty score (0-1, higher = more novel)"
+    )
+    confidence: float = Field(description="Confidence in the assessment (0-1)")
+    top_similar_papers: list[RankedPaper] = Field(
+        description="Most similar papers found"
+    )
+    assessment_summary: str = Field(
+        description="LLM-generated summary of novelty assessment"
+    )
 
 
 class SharedStore(BaseModel):
@@ -128,10 +226,28 @@ class SharedStore(BaseModel):
     )
     completed: bool = Field(default=False, description="Whether the flow has completed")
 
+    # RAG Flow data
+    embedded_query: EmbeddedQuery | None = Field(
+        default=None, description="Embedded research idea"
+    )
+    retrieved_papers: list[ArxivPaper] = Field(
+        default_factory=list, description="Papers retrieved from Qdrant"
+    )
+    final_papers: list[RankedPaper] = Field(
+        default_factory=list, description="Final ranked papers"
+    )
+    novelty_assessment: NoveltyAssessment | None = Field(
+        default=None, description="Final novelty assessment"
+    )
+    rag_completed: bool = Field(
+        default=False, description="Whether RAG flow has completed"
+    )
+
     class Config:
         arbitrary_types_allowed = True
 
     @field_validator("user_question")
+    @classmethod
     def user_question_must_not_be_empty(cls, v):
         if not v or v.strip() == "":
             raise ValueError("User question cannot be empty")

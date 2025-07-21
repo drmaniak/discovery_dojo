@@ -3,6 +3,8 @@
 from typing import Any
 
 from domain.config import (
+    NoveltyAssessment,
+    RankedPaper,
     SearchQuery,
     SearchResult,
     SharedStore,
@@ -238,6 +240,232 @@ def format_final_output(store: SharedStore) -> str:
         )
 
     output.append("\n" + "=" * 60)
+    return "\n".join(output)
+
+
+# RAG-specific display functions
+
+
+def display_rag_status(store: SharedStore) -> str:
+    """
+    Display current RAG flow status.
+
+    Args:
+        store: SharedStore object
+
+    Returns:
+        Formatted string showing RAG status
+    """
+    output = []
+    output.append("🔍 RAG NOVELTY ASSESSMENT STATUS")
+    output.append("-" * 40)
+
+    if not store.config.enable_rag_flow:
+        output.append("❌ RAG flow disabled")
+        return "\n".join(output)
+
+    # Embedding status
+    if store.embedded_query:
+        output.append(
+            f"✅ Research idea embedded ({len(store.embedded_query.embedding)} dimensions)"
+        )
+    else:
+        output.append("⏳ Research idea not yet embedded")
+
+    # Retrieval status
+    if store.retrieved_papers:
+        output.append(
+            f"✅ Retrieved {len(store.retrieved_papers)} papers from database"
+        )
+        avg_similarity = sum(p.similarity_score for p in store.retrieved_papers) / len(
+            store.retrieved_papers
+        )
+        output.append(f"   Average similarity: {avg_similarity:.3f}")
+    else:
+        output.append("⏳ Papers not yet retrieved")
+
+    # Ranking status
+    if store.final_papers:
+        reranking_used = any(p.rerank_score is not None for p in store.final_papers)
+        method = "reranking" if reranking_used else "similarity"
+        output.append(f"✅ Ranked {len(store.final_papers)} papers using {method}")
+
+        avg_novelty = sum(p.novelty_score for p in store.final_papers) / len(
+            store.final_papers
+        )
+        output.append(f"   Average novelty: {avg_novelty:.3f}")
+    else:
+        output.append("⏳ Papers not yet ranked")
+
+    # Assessment status
+    if store.novelty_assessment:
+        output.append("✅ Novelty assessment completed")
+        output.append(
+            f"   Final novelty score: {store.novelty_assessment.final_novelty_score:.2f}"
+        )
+        output.append(f"   Confidence: {store.novelty_assessment.confidence:.2f}")
+    else:
+        output.append("⏳ Novelty assessment not yet completed")
+
+    return "\n".join(output)
+
+
+def display_novelty_assessment_summary(assessment: NoveltyAssessment) -> str:
+    """
+    Display a summary of the novelty assessment.
+
+    Args:
+        assessment: NoveltyAssessment object
+
+    Returns:
+        Formatted summary string
+    """
+    output = []
+    output.append("=" * 60)
+    output.append("NOVELTY ASSESSMENT SUMMARY")
+    output.append("=" * 60)
+
+    output.append("\nResearch Idea:")
+    output.append("-" * 20)
+    output.append(
+        assessment.research_idea[:300] + "..."
+        if len(assessment.research_idea) > 300
+        else assessment.research_idea
+    )
+
+    output.append("\nAssessment Results:")
+    output.append("-" * 20)
+    output.append(f"📊 Novelty Score: {assessment.final_novelty_score:.2f}/1.0")
+    output.append(f"🎯 Confidence: {assessment.confidence:.2f}/1.0")
+    output.append(f"📚 Papers Retrieved: {assessment.total_papers_retrieved}")
+    output.append(f"🔍 Papers Analyzed: {assessment.final_papers_count}")
+    output.append(
+        f"🔄 Reranking Used: {'Yes' if assessment.reranking_enabled else 'No'}"
+    )
+
+    # Novelty interpretation
+    if assessment.final_novelty_score >= 0.8:
+        interpretation = "🟢 HIGHLY NOVEL - Very few similar papers found"
+    elif assessment.final_novelty_score >= 0.6:
+        interpretation = "🟡 MODERATELY NOVEL - Some similar work exists"
+    elif assessment.final_novelty_score >= 0.4:
+        interpretation = "🟠 LIMITED NOVELTY - Substantial similar work exists"
+    else:
+        interpretation = "🔴 LOW NOVELTY - Extensive similar work found"
+
+    output.append(f"\n{interpretation}")
+
+    if assessment.top_similar_papers:
+        output.append("\nTop Similar Papers:")
+        output.append("-" * 20)
+        for i, ranked_paper in enumerate(assessment.top_similar_papers[:3], 1):
+            paper = ranked_paper.paper
+            output.append(f"{i}. {paper.title}")
+            output.append(
+                f"   Similarity: {paper.similarity_score:.3f} | Novelty: {ranked_paper.novelty_score:.3f}"
+            )
+            if ranked_paper.rerank_score is not None:
+                output.append(f"   Rerank Score: {ranked_paper.rerank_score:.3f}")
+
+    output.append("\n" + "=" * 60)
+    return "\n".join(output)
+
+
+def display_rag_papers(papers: list[RankedPaper], max_papers: int = 10) -> str:
+    """
+    Display ranked papers in a formatted table.
+
+    Args:
+        papers: List of RankedPaper objects
+        max_papers: Maximum number of papers to display
+
+    Returns:
+        Formatted papers display
+    """
+    if not papers:
+        return "No papers found."
+
+    output = []
+    output.append(f"\n📚 TOP {min(len(papers), max_papers)} SIMILAR PAPERS")
+    output.append("=" * 80)
+
+    for i, ranked_paper in enumerate(papers[:max_papers], 1):
+        paper = ranked_paper.paper
+        output.append(f"\n{i}. {paper.title}")
+        output.append(f"   Similarity: {paper.similarity_score:.3f}")
+        output.append(f"   Novelty: {ranked_paper.novelty_score:.3f}")
+
+        if ranked_paper.rerank_score is not None:
+            output.append(f"   Rerank Score: {ranked_paper.rerank_score:.3f}")
+
+        # Show first 100 characters of abstract
+        abstract_preview = (
+            paper.abstract[:100] + "..."
+            if len(paper.abstract) > 100
+            else paper.abstract
+        )
+        output.append(f"   Abstract: {abstract_preview}")
+
+        # Show metadata if available
+        if paper.metadata:
+            if paper.metadata.get("authors"):
+                authors = paper.metadata["authors"]
+                if isinstance(authors, list):
+                    authors_str = ", ".join(authors[:2])  # Show first 2 authors
+                    if len(authors) > 2:
+                        authors_str += f" et al. (+{len(authors) - 2} more)"
+                else:
+                    authors_str = str(authors)
+                output.append(f"   Authors: {authors_str}")
+
+    output.append("\n" + "=" * 80)
+    return "\n".join(output)
+
+
+def format_full_pipeline_output(store: SharedStore) -> str:
+    """
+    Format the complete output for the full research pipeline including RAG results.
+
+    Args:
+        store: SharedStore object
+
+    Returns:
+        Formatted complete output string
+    """
+    output = []
+    output.append("=" * 80)
+    output.append("FULL RESEARCH PIPELINE - COMPLETED")
+    output.append("=" * 80)
+
+    # Basic info
+    output.append(f"\nOriginal Question: {store.user_question}")
+    output.append(f"Total Validation Cycles: {store.current_cycle}")
+
+    # Idea Generation Results
+    if store.final_ideas:
+        output.append("\n🧠 FINAL RESEARCH IDEAS:")
+        output.append("-" * 50)
+        output.append(store.final_ideas)
+        output.append("-" * 50)
+
+    # RAG Results
+    if store.novelty_assessment:
+        output.append(
+            "\n" + display_novelty_assessment_summary(store.novelty_assessment)
+        )
+
+        if store.final_papers:
+            output.append(display_rag_papers(store.final_papers, max_papers=5))
+
+    # Show completion reason
+    if store.validation_history and store.validation_history[-1].approved:
+        output.append("\n✓ Completion Reason: Ideas approved by user")
+    elif store.is_max_cycles_reached():
+        output.append(
+            f"\n⚠ Completion Reason: Maximum cycles ({store.config.max_cycles}) reached"
+        )
+
+    output.append("\n" + "=" * 80)
     return "\n".join(output)
 
 
