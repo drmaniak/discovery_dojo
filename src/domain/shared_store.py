@@ -4,10 +4,13 @@ from typing import Any
 
 from domain.config import (
     NoveltyAssessment,
+    PlanValidationResult,
     RankedPaper,
+    ResearchPlan,
     SearchQuery,
     SearchResult,
     SharedStore,
+    UserPlanningInput,
     ValidationResult,
 )
 
@@ -466,6 +469,228 @@ def format_full_pipeline_output(store: SharedStore) -> str:
         )
 
     output.append("\n" + "=" * 80)
+    return "\n".join(output)
+
+
+# =====================================================================
+# PLANNING FLOW HELPER FUNCTIONS
+# =====================================================================
+
+
+def safe_get_planning_input(store: SharedStore) -> UserPlanningInput | None:
+    """
+    Safely get user planning input from SharedStore.
+
+    Args:
+        store: SharedStore object
+
+    Returns:
+        UserPlanningInput object or None if not set
+    """
+    return store.user_planning_input
+
+
+def safe_get_research_plan(store: SharedStore) -> ResearchPlan | None:
+    """
+    Safely get research plan from SharedStore.
+
+    Args:
+        store: SharedStore object
+
+    Returns:
+        ResearchPlan object or None if not set
+    """
+    return store.research_plan
+
+
+def safe_get_plan_validation_history(store: SharedStore) -> list[PlanValidationResult]:
+    """
+    Safely get plan validation history from SharedStore.
+
+    Args:
+        store: SharedStore object
+
+    Returns:
+        List of PlanValidationResult objects
+    """
+    return store.plan_validation_history if store.plan_validation_history else []
+
+
+def check_planning_completion_conditions(store: SharedStore) -> dict[str, Any]:
+    """
+    Check planning flow completion conditions.
+
+    Args:
+        store: SharedStore object
+
+    Returns:
+        Dict with completion status information
+    """
+    return {
+        "planning_completed": store.planning_completed,
+        "has_research_plan": store.research_plan is not None,
+        "validation_cycles": len(store.plan_validation_history),
+        "max_cycles_reached": store.is_max_plan_cycles_reached(),
+        "current_cycle": store.plan_current_cycle,
+        "max_allowed_cycles": store.plan_config.max_refinement_cycles,
+    }
+
+
+def display_planning_progress(store: SharedStore) -> None:
+    """
+    Display current planning flow progress to the user.
+
+    Args:
+        store: SharedStore object
+    """
+    print("\n📊 PLANNING PROGRESS:")
+    print(f"{'=' * 50}")
+
+    # Basic status
+    status = "Completed" if store.planning_completed else "In Progress"
+    print(f"Status: {status}")
+
+    # Plan information
+    if store.research_plan:
+        print(f"📋 Plan Title: {store.research_plan.title}")
+        print(
+            f"📝 Project Type: {store.research_plan.project_type.replace('_', ' ').title()}"
+        )
+        print(f"⏰ Timeline: {store.research_plan.timeline.replace('_', ' ').title()}")
+        print(f"📈 Phases: {len(store.research_plan.phases)}")
+
+    # Validation progress
+    if store.plan_validation_history:
+        print(
+            f"🔄 Validation Cycles: {len(store.plan_validation_history)}/{store.plan_config.max_refinement_cycles}"
+        )
+        latest = store.plan_validation_history[-1]
+        approval_status = "✅ Approved" if latest.approved else "🔄 Needs Refinement"
+        print(f"Latest Status: {approval_status}")
+
+    print(f"{'=' * 50}")
+
+
+def format_planning_output(store: SharedStore) -> str:
+    """
+    Format final planning output for display.
+
+    Args:
+        store: SharedStore object
+
+    Returns:
+        Formatted string with planning results
+    """
+    if not store.planning_completed or not store.research_plan:
+        return "❌ Planning flow not completed or no plan available."
+
+    plan = store.research_plan
+    output = []
+
+    # Header
+    output.append("🎉 RESEARCH PLANNING COMPLETED!")
+    output.append("=" * 60)
+
+    # Plan overview
+    output.append(f"📋 Plan Title: {plan.title}")
+    output.append(f"📝 Project Type: {plan.project_type.replace('_', ' ').title()}")
+    output.append(f"⏰ Timeline: {plan.timeline.replace('_', ' ').title()}")
+    output.append(f"👥 Target Audience: {plan.target_audience.title()}")
+    output.append(f"📈 Total Phases: {len(plan.phases)}")
+
+    output.append("\n" + "=" * 60)
+
+    # Executive summary
+    output.append("🎯 EXECUTIVE SUMMARY:")
+    output.append(plan.executive_summary)
+
+    output.append("\n" + "=" * 60)
+
+    # Phase overview
+    output.append("📅 PHASE OVERVIEW:")
+    for phase in plan.phases:
+        output.append(f"  Phase {phase.phase_number}: {phase.title}")
+        output.append(f"    ⏱️  Duration: {phase.duration}")
+        output.append(f"    ✅ Tasks: {len(phase.tasks)}")
+        output.append(f"    🎯 Deliverables: {len(phase.deliverables)}")
+
+    # Validation summary
+    if store.plan_validation_history:
+        output.append("\n🔍 VALIDATION SUMMARY:")
+        output.append(f"  Cycles completed: {len(store.plan_validation_history)}")
+        final_validation = store.plan_validation_history[-1]
+        if final_validation.approved:
+            output.append("  ✅ Final status: Approved")
+        else:
+            output.append("  ⏱️  Final status: Maximum cycles reached")
+
+    output.append("\n" + "=" * 60)
+    output.append("📁 Plan saved to file for detailed review")
+    output.append("=" * 60)
+
+    return "\n".join(output)
+
+
+def format_full_research_assistant_output(store: SharedStore) -> str:
+    """
+    Format complete research assistant output including all three flows.
+
+    Args:
+        store: SharedStore object
+
+    Returns:
+        Comprehensive formatted string with all results
+    """
+    output = []
+
+    # Main header
+    output.append("🤖 COMPLETE RESEARCH ASSISTANT RESULTS")
+    output.append("=" * 80)
+
+    # Phase 1: Idea Generation
+    output.append("\n📋 PHASE 1: IDEA GENERATION")
+    output.append("-" * 40)
+    if store.final_ideas:
+        output.append("✅ Status: Completed")
+        output.append(f"💡 Research Idea: {store.final_ideas[:200]}...")
+        output.append(f"🔄 Validation Cycles: {len(store.validation_history)}")
+    else:
+        output.append("❌ Status: Not completed")
+
+    # Phase 2: Novelty Assessment
+    output.append("\n🔍 PHASE 2: NOVELTY ASSESSMENT")
+    output.append("-" * 40)
+    if store.novelty_assessment:
+        output.append("✅ Status: Completed")
+        output.append(
+            f"📊 Novelty Score: {store.novelty_assessment.final_novelty_score:.2f}/1.0"
+        )
+        output.append(f"📈 Confidence: {store.novelty_assessment.confidence:.2f}")
+        output.append(
+            f"📚 Papers Analyzed: {store.novelty_assessment.final_papers_count}"
+        )
+    else:
+        output.append("❌ Status: Not completed")
+
+    # Phase 3: Research Planning
+    output.append("\n📅 PHASE 3: RESEARCH PLANNING")
+    output.append("-" * 40)
+    if store.planning_completed and store.research_plan:
+        plan = store.research_plan
+        output.append("✅ Status: Completed")
+        output.append(f"📋 Plan Title: {plan.title}")
+        output.append(f"📝 Project Type: {plan.project_type.replace('_', ' ').title()}")
+        output.append(f"⏰ Timeline: {plan.timeline.replace('_', ' ').title()}")
+        output.append(f"📈 Phases: {len(plan.phases)}")
+        output.append(f"🔄 Planning Cycles: {len(store.plan_validation_history)}")
+    else:
+        output.append("❌ Status: Not completed")
+
+    output.append("\n" + "=" * 80)
+    output.append("🎉 COMPREHENSIVE RESEARCH PIPELINE COMPLETED!")
+    output.append("📁 All results saved to respective files")
+    output.append("=" * 80)
+
     return "\n".join(output)
 
 

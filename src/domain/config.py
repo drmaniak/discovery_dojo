@@ -194,6 +194,149 @@ class NoveltyAssessment(BaseModel):
     )
 
 
+# Planning Flow data models
+class PlanConfig(BaseModel):
+    """Configuration for Planning Flow."""
+
+    max_refinement_cycles: int = Field(
+        default=3, ge=1, le=5, description="Maximum number of plan refinement cycles"
+    )
+    project_types: list[str] = Field(
+        default=[
+            "academic_paper",
+            "general_research",
+            "presentation",
+            "educational_deepdive",
+            "technical_report",
+            "blog_post",
+        ],
+        description="Available project types",
+    )
+    timeline_options: list[str] = Field(
+        default=["1_week", "2_weeks", "1_month", "3_months", "6_months", "1_year"],
+        description="Available timeline options",
+    )
+    output_directory: str = Field(
+        default="./research_plans", description="Directory to save generated plans"
+    )
+
+
+class UserPlanningInput(BaseModel):
+    """User input for planning configuration."""
+
+    project_type: str = Field(description="Type of project to plan for")
+    timeline: str = Field(description="Expected timeline for completion")
+    additional_requirements: str = Field(
+        default="", description="Any additional specific requirements"
+    )
+    target_audience: str = Field(
+        default="academic",
+        description="Target audience level (academic, general, etc.)",
+    )
+    resources_available: str = Field(
+        default="", description="Available resources (budget, team size, etc.)"
+    )
+
+    @field_validator("project_type")
+    @classmethod
+    def validate_project_type(cls, v):
+        valid_types = [
+            "academic_paper",
+            "general_research",
+            "presentation",
+            "educational_deepdive",
+            "technical_report",
+            "blog_post",
+        ]
+        if v not in valid_types:
+            raise ValueError(f"Project type must be one of: {', '.join(valid_types)}")
+        return v
+
+    @field_validator("timeline")
+    @classmethod
+    def validate_timeline(cls, v):
+        valid_timelines = [
+            "1_week",
+            "2_weeks",
+            "1_month",
+            "3_months",
+            "6_months",
+            "1_year",
+        ]
+        if v not in valid_timelines:
+            raise ValueError(f"Timeline must be one of: {', '.join(valid_timelines)}")
+        return v
+
+
+class PlanPhase(BaseModel):
+    """Individual phase of a research plan."""
+
+    phase_number: int = Field(description="Phase number (1, 2, 3, etc.)")
+    title: str = Field(description="Phase title")
+    description: str = Field(description="Detailed phase description")
+    duration: str = Field(description="Estimated duration")
+    tasks: list[str] = Field(description="Specific tasks in this phase")
+    deliverables: list[str] = Field(description="Expected deliverables")
+    milestones: list[str] = Field(description="Key milestones to track")
+
+
+class ResearchPlan(BaseModel):
+    """Generated research plan structure."""
+
+    title: str = Field(description="Research plan title")
+    project_type: str = Field(description="Type of project")
+    timeline: str = Field(description="Overall project timeline")
+    executive_summary: str = Field(description="Brief overview of the research plan")
+
+    # Detailed plan structure
+    phases: list[PlanPhase] = Field(
+        description="Detailed phases with tasks and milestones"
+    )
+
+    # Additional planning elements
+    resources_needed: list[str] = Field(
+        default_factory=list, description="Required resources (tools, data, personnel)"
+    )
+    potential_challenges: list[str] = Field(
+        default_factory=list, description="Anticipated challenges and risks"
+    )
+    success_metrics: list[str] = Field(
+        default_factory=list, description="How to measure success and progress"
+    )
+    related_papers: list[str] = Field(
+        default_factory=list, description="Key papers to reference/study"
+    )
+
+    # Meta information
+    novelty_context: str = Field(
+        default="", description="Context from novelty assessment"
+    )
+    target_audience: str = Field(
+        default="academic", description="Target audience for this plan"
+    )
+
+
+class PlanValidationResult(BaseModel):
+    """Result of a plan validation cycle."""
+
+    approved: bool = Field(description="Whether the plan was approved by user")
+    feedback: str = Field(description="User feedback on the current plan")
+    refinement_suggestions: str = Field(
+        default="", description="Specific suggestions for plan refinement"
+    )
+    cycle_number: int = Field(description="Current refinement cycle number")
+    areas_to_improve: list[str] = Field(
+        default_factory=list, description="Specific areas that need improvement"
+    )
+
+    @field_validator("feedback")
+    @classmethod
+    def feedback_must_not_be_empty(cls, v):
+        if not v or v.strip() == "":
+            raise ValueError("Validation feedback cannot be empty")
+        return v.strip()
+
+
 class SharedStore(BaseModel):
     """Main shared store for the Idea Generation Flow with type safety."""
 
@@ -243,6 +386,26 @@ class SharedStore(BaseModel):
         default=False, description="Whether RAG flow has completed"
     )
 
+    # Planning Flow data
+    user_planning_input: UserPlanningInput | None = Field(
+        default=None, description="User planning configuration and preferences"
+    )
+    research_plan: ResearchPlan | None = Field(
+        default=None, description="Generated research plan"
+    )
+    plan_validation_history: list[PlanValidationResult] = Field(
+        default_factory=list, description="History of plan refinement cycles"
+    )
+    plan_current_cycle: int = Field(
+        default=0, description="Current planning refinement cycle number"
+    )
+    planning_completed: bool = Field(
+        default=False, description="Whether Planning flow has completed"
+    )
+    plan_config: PlanConfig = Field(
+        default_factory=PlanConfig, description="Planning flow configuration"
+    )
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -282,6 +445,33 @@ class SharedStore(BaseModel):
             cycle_number=self.current_cycle,
         )
         self.validation_history.append(validation_result)
+
+    # Planning Flow helper methods
+    def get_current_plan_cycle_count(self) -> int:
+        """Get the number of planning validation cycles completed."""
+        return len(self.plan_validation_history)
+
+    def is_max_plan_cycles_reached(self) -> bool:
+        """Check if maximum planning refinement cycles have been reached."""
+        return self.plan_current_cycle >= self.plan_config.max_refinement_cycles
+
+    def add_plan_validation_result(
+        self,
+        approved: bool,
+        feedback: str,
+        refinement_suggestions: str = "",
+        areas_to_improve: list[str] | None = None,
+    ) -> None:
+        """Add a new plan validation result to history."""
+        self.plan_current_cycle += 1
+        validation_result = PlanValidationResult(
+            approved=approved,
+            feedback=feedback,
+            refinement_suggestions=refinement_suggestions,
+            cycle_number=self.plan_current_cycle,
+            areas_to_improve=areas_to_improve or [],
+        )
+        self.plan_validation_history.append(validation_result)
 
 
 def create_shared_store(

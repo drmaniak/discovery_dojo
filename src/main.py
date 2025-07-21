@@ -4,8 +4,15 @@ import asyncio
 import os
 import sys
 
+from pocketflow import AsyncFlow
+
 from domain.config import RAGConfig, SearchConfig, create_shared_store
-from domain.shared_store import format_final_output, format_full_pipeline_output
+from domain.shared_store import (
+    format_final_output,
+    format_full_pipeline_output,
+    format_full_research_assistant_output,
+    format_planning_output,
+)
 from flows.flow_factory import get_flow
 from flows.legacy_qa_flow import create_qa_flow
 
@@ -59,16 +66,26 @@ def get_user_question() -> str:
     """Get research question from user with examples."""
     print("🔬 Welcome to the AI Research Assistant!")
     print("=" * 50)
-    print("\nThis tool helps you generate research ideas by:")
-    print("• Creating diverse search queries from your question")
-    print("• Searching the web for relevant information")
-    print("• Generating concrete research ideas")
-    print("• Iteratively refining ideas with your feedback")
-    print("• Assessing novelty against existing research (RAG)")
-    print("\nExample questions:")
+    print("\nThis comprehensive tool helps you:")
+    print("📋 PHASE 1: Generate research ideas by:")
+    print("  • Creating diverse search queries from your question")
+    print("  • Searching the web for relevant information")
+    print("  • Generating concrete research ideas")
+    print("  • Iteratively refining ideas with your feedback")
+    print("🔍 PHASE 2: Assess novelty by:")
+    print("  • Comparing against 2.7M ArXiv papers")
+    print("  • Calculating mathematical novelty scores")
+    print("  • Optional reranking with local AI models")
+    print("📅 PHASE 3: Create research plans by:")
+    print("  • Interactive project configuration")
+    print("  • Comprehensive phase planning")
+    print("  • Beautiful markdown output")
+    print("\nExample research questions:")
     print("• How can AI help with climate change research?")
     print("• What are the latest developments in quantum computing?")
     print("• How can machine learning improve healthcare outcomes?")
+    print("• Can we use LLMs to improve software testing?")
+    print("• How might blockchain enhance scientific reproducibility?")
 
     while True:
         question = input("\n💭 Enter your research question: ").strip()
@@ -228,7 +245,10 @@ async def run_idea_generation_flow(user_question: str, config: SearchConfig):
     try:
         # Get and run the flow
         flow = get_flow("idea_generation")
-        await flow.run_async(shared_dict)
+        if isinstance(flow, AsyncFlow):
+            await flow.run_async(shared_dict)
+        else:
+            flow.run(shared_dict)
 
         print("\n✅ Research idea generation completed!")
 
@@ -284,7 +304,10 @@ async def run_full_research_pipeline(user_question: str, config: SearchConfig):
             # Run idea generation only
             flow = get_flow("idea_generation")
 
-        await flow.run_async(shared_dict)
+        if isinstance(flow, AsyncFlow):
+            await flow.run_async(shared_dict)
+        else:
+            flow.run(shared_dict)
 
         # Display final results
         store = shared_dict["store"]
@@ -327,6 +350,165 @@ def run_simple_qa():
     print(f"Answer: {shared['answer']}")
 
 
+async def run_complete_research_assistant(user_question: str, config: SearchConfig):
+    """
+    Run the complete 3-phase research assistant pipeline.
+
+    This includes:
+    1. Idea Generation Flow with interactive validation
+    2. RAG Flow for novelty assessment
+    3. Planning Flow for comprehensive research plan generation
+
+    Args:
+        user_question: The research question from user
+        config: Configuration for the flows
+    """
+    # Create shared store
+    shared_store = create_shared_store(user_question, config)
+    shared_dict = {"store": shared_store}
+
+    print("\n🚀 Starting Complete Research Assistant Pipeline...")
+    print(
+        f"📊 Configuration: {config.num_queries} queries, {config.max_cycles} max cycles"
+    )
+    print(
+        f"🔍 RAG Assessment: {config.rag_config.collection_name} at {config.rag_config.qdrant_url}"
+    )
+    if config.rag_config.enable_reranking:
+        print(f"🔄 Reranking: {config.rag_config.rerank_model}")
+    else:
+        print("📊 Ranking: Similarity-based only")
+    print("📋 Planning: Interactive research plan generation")
+    print("\n" + "=" * 80)
+
+    try:
+        # Check required API keys
+        missing_keys = []
+        if not os.getenv("NEBIUS_API_KEY"):
+            missing_keys.append("NEBIUS_API_KEY")
+
+        if missing_keys:
+            print(f"⚠️ Warning: Missing API keys: {', '.join(missing_keys)}")
+            print(
+                "The complete pipeline requires all API keys. Falling back to idea generation only..."
+            )
+            flow = get_flow("idea_generation")
+        else:
+            # Run complete research assistant pipeline
+            flow = get_flow("complete_assistant")
+
+        if isinstance(flow, AsyncFlow):
+            await flow.run_async(shared_dict)
+        else:
+            flow.run(shared_dict)
+
+        # Display comprehensive results
+        store = shared_dict["store"]
+        if store.planning_completed and store.research_plan:
+            print("\n🎉 Complete Research Assistant Pipeline Completed!")
+
+            # Display comprehensive results
+            full_output = format_full_research_assistant_output(store)
+            print(full_output)
+        elif store.rag_completed and store.novelty_assessment:
+            print("\n✅ Research pipeline completed (without planning)!")
+            full_output = format_full_pipeline_output(store)
+            print(full_output)
+        else:
+            print("\n✅ Idea generation completed!")
+            final_output = format_final_output(store)
+            print(final_output)
+
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Process interrupted by user.")
+        print("Partial results may be available in the shared store.")
+    except Exception as e:
+        print(f"\n❌ An error occurred: {str(e)}")
+        print("Please check your API keys and network connection.")
+        if "Qdrant" in str(e):
+            print("💡 Tip: Make sure Qdrant server is running and accessible.")
+        elif "NEBIUS_API_KEY" in str(e):
+            print("💡 Tip: Set NEBIUS_API_KEY for embedding generation.")
+        sys.exit(1)
+
+
+def run_planning_only_mode():
+    """
+    Run planning flow only - requires existing research idea and novelty assessment.
+    This mode is useful when you want to create plans for existing research ideas.
+    """
+    print("\n📋 PLANNING ONLY MODE")
+    print("=" * 50)
+    print("This mode creates research plans from existing ideas.")
+    print("You'll need to provide a research idea manually.")
+
+    # Get research idea from user
+    print("\n💡 Please provide your research idea:")
+    research_idea = input("Research idea: ").strip()
+
+    if not research_idea:
+        print("❌ No research idea provided. Exiting.")
+        return
+
+    # Create minimal configuration for planning only
+    config = SearchConfig(
+        num_queries=1,  # Not used in planning only
+        max_cycles=1,  # Not used in planning only
+        tavily_api_key=os.getenv("TAVILY_API_KEY", "dummy"),  # Not used
+        openai_api_key=os.getenv("OPENAI_API_KEY", ""),  # Required for LLM
+        enable_rag_flow=False,  # RAG not used in planning only
+    )
+
+    # Create shared store and populate with manual research idea
+    shared_store = create_shared_store("Planning only mode", config)
+    shared_store.final_ideas = research_idea
+    shared_store.completed = True  # Mark idea generation as "completed"
+
+    # Mock novelty assessment for planning (not available in planning-only mode)
+    from domain.config import NoveltyAssessment
+
+    mock_assessment = NoveltyAssessment(
+        research_idea=research_idea,
+        total_papers_retrieved=0,
+        reranking_enabled=False,
+        final_papers_count=0,
+        final_novelty_score=0.5,  # Neutral score
+        confidence=0.3,  # Low confidence since no real assessment
+        top_similar_papers=[],
+        assessment_summary="Planning-only mode: No novelty assessment performed.",
+    )
+    shared_store.novelty_assessment = mock_assessment
+    shared_store.rag_completed = True  # Mark RAG as "completed"
+
+    shared_dict = {"store": shared_store}
+
+    print("\n🚀 Starting Planning Flow...")
+    print(f"💡 Research Idea: {research_idea[:100]}...")
+    print("\n" + "=" * 60)
+
+    try:
+        # Run planning flow only
+        planning_flow = get_flow("planning")
+        planning_flow.run(shared_dict)
+
+        # Display results
+        store = shared_dict["store"]
+        if store.planning_completed and store.research_plan:
+            print("\n🎉 Research Planning Completed!")
+            planning_output = format_planning_output(store)
+            print(planning_output)
+        else:
+            print("\n❌ Planning flow did not complete successfully.")
+
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Process interrupted by user.")
+        print("Partial results may be available in the shared store.")
+    except Exception as e:
+        print(f"\n❌ An error occurred during planning: {str(e)}")
+        print("Please check your OpenAI API key and network connection.")
+        sys.exit(1)
+
+
 async def main_async():
     """Main async function for the research assistant."""
     if not setup_environment():
@@ -335,13 +517,15 @@ async def main_async():
     print("\n🔧 Select Mode:")
     print("1. Idea Generation Only (no novelty assessment)")
     print("2. Full Research Pipeline (idea generation + RAG novelty assessment)")
-    print("3. Simple Q&A (legacy mode)")
+    print("3. Complete Research Assistant (idea generation + RAG + planning)")
+    print("4. Planning Only (requires existing research idea)")
+    print("5. Simple Q&A (legacy mode)")
 
     while True:
-        choice = input("\nChoose mode (1, 2, or 3): ").strip()
-        if choice in ["1", "2", "3"]:
+        choice = input("\nChoose mode (1, 2, 3, 4, or 5): ").strip()
+        if choice in ["1", "2", "3", "4", "5"]:
             break
-        print("Please enter 1, 2, or 3.")
+        print("Please enter 1, 2, 3, 4, or 5.")
 
     if choice == "1":
         # Idea Generation Only
@@ -349,10 +533,18 @@ async def main_async():
         config = get_configuration(include_rag=False)
         await run_idea_generation_flow(user_question, config)
     elif choice == "2":
-        # Full Research Pipeline
+        # Full Research Pipeline (Ideas + RAG)
         user_question = get_user_question()
         config = get_configuration(include_rag=True)
         await run_full_research_pipeline(user_question, config)
+    elif choice == "3":
+        # Complete Research Assistant (Ideas + RAG + Planning)
+        user_question = get_user_question()
+        config = get_configuration(include_rag=True)
+        await run_complete_research_assistant(user_question, config)
+    elif choice == "4":
+        # Planning Only Mode
+        run_planning_only_mode()
     else:
         # Simple Q&A Flow
         run_simple_qa()
