@@ -6,6 +6,10 @@
 
 ## 🏗️ Architecture Overview
 
+The following diagram represents a high-level system deisgn schematic for the project
+
+![Discovery Dojo System Design](./notes/media/discovery_dojo_system_design_v1.png)
+
 The system uses a **flow-based architecture** built on the [PocketFlow framework](https://the-pocket.github.io/PocketFlow/), orchestrating multiple AI agents through structured workflows with shared state management.
 
 ### 📊 Information Flow
