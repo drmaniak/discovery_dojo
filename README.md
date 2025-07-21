@@ -128,7 +128,7 @@ uv run src/main.py
 > [!IMPORTANT]
 > Ensure you have access to a valid Qdrant Databse with embedded ArXiV papers for the RAG flow to work.
 >
-> You will be asked to provide a url to the valid Qdrant database during the flow.
+> You will be asked to provide a url to the valid Qdrant database during the flow (e.g. http://localhost:6333)
 
 ### Flow Options
 
@@ -144,7 +144,7 @@ uv run src/main.py
 - **LLM**: OpenAI GPT models with structured output
 - **Search**: Tavily API for web research
 - **Vector DB**: Qdrant for similarity search
-- **Embeddings**: Qwen3-Embedding models
+- **Embeddings**: Qwen3-Embedding models via [Nebius Studio](https://studio.nebius.com/)
 - **Reranking**: Optional Qwen3-Reranker models
 - **Output**: Beautiful markdown with emojis and formatting
 
@@ -156,7 +156,6 @@ src/
 ├── flows/           # Flow definitions and orchestration
 ├── nodes/           # Individual processing nodes
 ├── utils/           # LLM, search, and utility functions
-├── adapters/        # External service integrations
 └── main.py         # CLI interface and flow execution
 ```
 
