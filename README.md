@@ -6,7 +6,7 @@
 
 ## 🏗️ Architecture Overview
 
-The system uses a **flow-based architecture** built on the PocketFlow framework, orchestrating multiple AI agents through structured workflows with shared state management.
+The system uses a **flow-based architecture** built on the [PocketFlow framework](https://the-pocket.github.io/PocketFlow/), orchestrating multiple AI agents through structured workflows with shared state management.
 
 ### 📊 Information Flow
 
@@ -140,7 +140,7 @@ uv run src/main.py
 
 ## 🛠️ Technology Stack
 
-- **Framework**: PocketFlow (async workflow orchestration)
+- **Framework**: [PocketFlow](https://the-pocket.github.io/PocketFlow/) (async workflow orchestration)
 - **LLM**: OpenAI GPT models with structured output
 - **Search**: Tavily API for web research
 - **Vector DB**: Qdrant for similarity search
