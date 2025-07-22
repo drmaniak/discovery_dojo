@@ -3,6 +3,7 @@
 from typing import Any
 
 from domain.config import (
+    ArxivPaper,
     NoveltyAssessment,
     PlanValidationResult,
     RankedPaper,
@@ -361,9 +362,12 @@ def display_novelty_assessment_summary(assessment: NoveltyAssessment) -> str:
     if assessment.top_similar_papers:
         output.append("\nTop Similar Papers:")
         output.append("-" * 20)
-        for i, ranked_paper in enumerate(assessment.top_similar_papers[:3], 1):
+        for i, ranked_paper in enumerate(assessment.top_similar_papers[:5], 1):
             paper = ranked_paper.paper
             output.append(f"{i}. {paper.title}")
+            authors = get_author_string(paper)
+            if authors:
+                output.append(f"   By {authors}")
             output.append(
                 f"   Similarity: {paper.similarity_score:.3f} | Novelty: {ranked_paper.novelty_score:.3f}"
             )
@@ -403,26 +407,38 @@ def display_rag_papers(papers: list[RankedPaper], max_papers: int = 10) -> str:
 
         # Show first 100 characters of abstract
         abstract_preview = (
-            paper.abstract[:100] + "..."
-            if len(paper.abstract) > 100
+            paper.abstract[:200] + "..."
+            if len(paper.abstract) > 200
             else paper.abstract
         )
         output.append(f"   Abstract: {abstract_preview}")
 
         # Show metadata if available
-        if paper.metadata:
-            if paper.metadata.get("authors"):
-                authors = paper.metadata["authors"]
-                if isinstance(authors, list):
-                    authors_str = ", ".join(authors[:2])  # Show first 2 authors
-                    if len(authors) > 2:
-                        authors_str += f" et al. (+{len(authors) - 2} more)"
-                else:
-                    authors_str = str(authors)
-                output.append(f"   Authors: {authors_str}")
+        author_string = get_author_string(paper)
+        if author_string:
+            output.append(f"   {author_string}")
 
     output.append("\n" + "=" * 80)
     return "\n".join(output)
+
+
+def get_author_string(paper: ArxivPaper) -> str | None:
+    if paper.metadata:
+        if paper.metadata.get("authors"):
+            authors = paper.metadata["authors"]
+            if isinstance(authors, list):
+                authors_str = ", ".join(authors[:2])  # Show first 2 authors
+                if len(authors) > 2:
+                    authors_str += f" et al. (+{len(authors) - 2} more)"
+            else:
+                authors_str = str(authors)
+                authors_list = authors_str.split(",")
+                if len(authors_list) > 2:
+                    authors_str = (
+                        f"{authors_list[:2]} et al. (+{len(authors) - 2} more)"
+                    )
+
+            return f"Authors: {authors_str}"
 
 
 def format_full_pipeline_output(store: SharedStore) -> str:

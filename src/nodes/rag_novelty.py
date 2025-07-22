@@ -218,7 +218,7 @@ class NoveltyAssessmentNode(Node):
             confidence = 0.7  # Single paper, moderate confidence
 
         # Generate assessment summary based on the mathematical analysis
-        top_papers = ranked_papers[:5]  # Top 5 most similar
+        top_papers = ranked_papers[:10]  # Top 5 most similar
         min_novelty = min(novelty_scores)
         max_novelty = max(novelty_scores)
 
@@ -274,7 +274,7 @@ class NoveltyAssessmentNode(Node):
             final_papers_count=len(ranked_papers),
             final_novelty_score=final_novelty_score,
             confidence=confidence,
-            top_similar_papers=ranked_papers[:10],  # Store top 10
+            top_similar_papers=ranked_papers[:20],  # Store top 20
             assessment_summary=assessment_summary,
         )
 
